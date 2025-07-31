@@ -1,9 +1,7 @@
-
 #!/bin/bash
 
 BOT_TOKEN="8027310373:AAEuKPwgkvr3P-8b54GbKPaM5uU7hGWv71Q"
 CHAT_ID="6252019930"
-
 DEFAULT_DOMAINS=("cloudflare.com" "www.bing.com" "cdn.jsdelivr.net" "www.microsoft.com" "azure.microsoft.com")
 
 function deploy_mtproxy() {
@@ -18,7 +16,6 @@ function deploy_mtproxy() {
     echo "$((i+1)). ${DEFAULT_DOMAINS[$i]}"
   done
   read -p "请输入伪装域名编号或自定义域名（默认1）: " DOMAIN_CHOICE
-
   if [[ "$DOMAIN_CHOICE" =~ ^[1-9][0-9]*$ ]] && [ "$DOMAIN_CHOICE" -le ${#DEFAULT_DOMAINS[@]} ]; then
     DOMAIN="${DEFAULT_DOMAINS[$((DOMAIN_CHOICE-1))]}"
   elif [ -z "$DOMAIN_CHOICE" ]; then
@@ -35,14 +32,7 @@ function deploy_mtproxy() {
 
   docker rm -f mtproxy 2>/dev/null
 
-  docker run -d --name mtproxy --restart=always \
-    -e domain="$DOMAIN" \
-    -e secret="$SECRET" \
-    -e ip_white_list="IP" \
-    -e provider=2 \
-    -p ${MAPPED_HTTP}:80 \
-    -p ${MAPPED_PORT}:443 \
-    ellermister/mtproxy
+  docker run -d --name mtproxy --restart=always     -e domain="$DOMAIN"     -e secret="$SECRET"     -e ip_white_list="IP"     -e provider=2     -e mapped_tls_port="$MAPPED_PORT"     -p ${MAPPED_HTTP}:80     -p ${MAPPED_PORT}:443     ellermister/mtproxy
 
   IP=$(curl -s ipv4.ip.sb)
   HEX_DOMAIN=$(echo -n $DOMAIN | xxd -ps -c 200)
@@ -52,14 +42,12 @@ function deploy_mtproxy() {
   WHITE_LIST_URL="http://${IP}:${MAPPED_HTTP}/add.php"
 
   echo -e "\n✅ MTProxy 已部署"
+  echo -e "🔐 Secret: ${SECRET_FULL}"
   echo -e "📡 链接: ${LINK}"
   echo -e "🧊 白名单激活: ${WHITE_LIST_URL}"
   echo -e "📷 二维码链接: ${QR_LINK}\n"
 
-  curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage \
-    -d chat_id="${CHAT_ID}" \
-    -d text="✅ MTProxy 部署完成（白名单 ${MAPPED_PORT}）%0A🧊 白名单激活: ${WHITE_LIST_URL}%0A📡 链接: ${LINK}" \
-    -d parse_mode="Markdown"
+  curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage     -d chat_id="${CHAT_ID}"     -d text="✅ MTProxy 部署完成\n🌍 白名单激活地址: ${WHITE_LIST_URL}\n📡 连接: ${LINK}"
 }
 
 function uninstall_mtproxy() {
@@ -69,33 +57,32 @@ function uninstall_mtproxy() {
   echo -e "\033[1;32m✅ 已卸载 MTProxy。\033[0m"
 }
 
-function count_all_connections() {
-  echo -e "\n🔍 正在统计连接客户端总数..."
-  count=$(ss -ntp state established '( sport = :8443 )' | grep -v 127.0.0.1 | grep -c ESTAB)
-  echo -e "📶 当前总连接数：$count"
-}
-
-function count_telegram_clients() {
+function view_connections() {
   echo -e "\n🔍 正在统计连接客户端 IP..."
-  mapfile -t ip_list < <(ss -ntp state established '( sport = :8443 )' | awk '{print $5}' | cut -d: -f1 | sort | uniq -c)
-  for ip in "${ip_list[@]}"; do
-    echo "✅ $ip 个连接（可能是 Telegram 客户端）"
+  ss -tn sport = :443 | awk 'NR>1 {print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | while read count ip; do
+    echo "✅ ${ip} 有 ${count} 个连接（可能是 Telegram 客户端）"
   done
 }
 
-echo -e "\n==== MTProxy 管理脚本（含连接识别） ===="
+function total_connections() {
+  count=$(ss -tn sport = :443 | awk 'NR>1' | wc -l)
+  echo -e "\n📊 当前总连接数: ${count}"
+}
+
+while true; do
+echo -e "\n==== MTProxy 管理脚本（固定端口监听 v5） ===="
 echo "1. 部署 MTProxy"
 echo "2. 卸载 MTProxy"
 echo "3. 退出"
 echo "4. 查看连接总数"
 echo "5. 查看 Telegram 客户端连接"
 read -p "请输入操作选项 [1-5]: " choice
-
 case $choice in
   1) deploy_mtproxy ;;
   2) uninstall_mtproxy ;;
   3) echo "已退出"; exit 0 ;;
-  4) count_all_connections ;;
-  5) count_telegram_clients ;;
-  *) echo "无效输入"; exit 1 ;;
+  4) total_connections ;;
+  5) view_connections ;;
+  *) echo "无效输入";;
 esac
+done
