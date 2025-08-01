@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.6   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.7   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  基于 ellermister/nginx-mtproxy 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
@@ -30,7 +30,7 @@ uninstall_mtproxy() {
     # 停止并删除 MTProxy 容器
     echo -e "\n${YELLOW}>>> 正在停止并删除 nginx-mtproxy 容器...${RESET}"
     if docker ps -a --format '{{.Names}}' | grep -q '^nginx-mtproxy$'; then
-        read -rp "确定要删除 nginx-mtproxy 容器吗？(y/N): " confirm_remove
+        read -rp "确定要删除 nginx-mtproxy 容器吗？(Y/N): " confirm_remove
         if [[ "$confirm_remove" =~ ^[yY]$ ]]; then
             docker stop nginx-mtproxy > /dev/null 2>&1
             docker rm nginx-mtproxy > /dev/null 2>&1
@@ -44,7 +44,7 @@ uninstall_mtproxy() {
 
     # 询问是否卸载 Docker
     echo -e "\n${YELLOW}>>> MTProxy 相关操作已完成。${RESET}"
-    read -rp "是否需要一并卸载 Docker 及其相关依赖？此操作会影响服务器上所有其他 Docker 容器！(y/N): " remove_docker
+    read -rp "是否需要一并卸载 Docker 及其相关依赖？此操作会影响服务器上所有其他 Docker 容器！(Y/N): " remove_docker
     if [[ "$remove_docker" =~ ^[yY]$ ]]; then
         echo -e "\n${BLUE}>>> 正在尝试卸载 Docker...${RESET}"
 
@@ -64,7 +64,7 @@ uninstall_mtproxy() {
             return
         fi
 
-        read -rp "是否同时删除 Docker 数据目录（/var/lib/docker）？这将永久删除所有镜像和容器数据！(y/N): " remove_data
+        read -rp "是否同时删除 Docker 数据目录（/var/lib/docker）？这将永久删除所有镜像和容器数据！(Y/N): " remove_data
         if [[ "$remove_data" =~ ^[yY]$ ]]; then
             echo -e "${RED}>>> 正在删除 Docker 数据目录...${RESET}"
             rm -rf /var/lib/docker
@@ -94,12 +94,27 @@ while true; do
         echo -e "  ${GREEN}已自动生成密码：$secret${RESET}"
       fi
 
-      read -e -p "请输入伪装域名 (默认: azure.microsoft.com): " domain
-      [[ -z "$domain" ]] && domain="azure.microsoft.com"
-
-      read -rp "是否需要设置 TAG 标签? (y/N，默认: N): " tag_enable
-      [[ -z "$tag_enable" ]] && tag_enable="N"
-
+      # 伪装域名选择菜单
+      echo ""
+      echo "请选择伪装域名："
+      echo "  1. azure.microsoft.com (默认)"
+      echo "  2. www.microsoft.com"
+      echo "  3. www.cloudflare.com"
+      echo "  4. cdn.jsdelivr.net"
+      echo "  5. www.google.com"
+      echo "  6. www.bing.com"
+      echo "  7. www.youtube.com"
+      read -p "请输入选项 [1-7]: " domain_choice
+      case $domain_choice in
+        2) domain="www.microsoft.com" ;;
+        3) domain="www.cloudflare.com" ;;
+        4) domain="cdn.jsdelivr.net" ;;
+        5) domain="www.google.com" ;;
+        6) domain="www.bing.com" ;;
+        7) domain="www.youtube.com" ;;
+        *) domain="azure.microsoft.com" ;;
+      esac
+      
       echo -e "\n${BLUE}>>> 正在检查并安装 Docker...${RESET}"
       if ! command -v docker >/dev/null 2>&1; then
         echo -e "${YELLOW}Docker 未安装，正在自动安装...${RESET}"
@@ -109,6 +124,8 @@ while true; do
       fi
 
       echo -e "\n${BLUE}>>> 正在拉取并启动 nginx-mtproxy 容器...${RESET}"
+      read -rp "是否需要设置 TAG 标签? (Y/N，默认: N): " tag_enable
+      [[ -z "$tag_enable" ]] && tag_enable="N"
       if [[ $tag_enable =~ ^[yY]$ ]]; then
         read -e -p "请输入 TAG 标签: " tag
         if [[ -z "$tag" ]]; then
