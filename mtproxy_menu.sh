@@ -5,27 +5,31 @@ GITHUB_RAW="https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/
 SCRIPT_PATH=$(readlink -f "$0")
 
 update_script() {
-    echo -e "\n📥 正在更新脚本..."
+    echo ""
+    echo "📥 正在更新脚本..."
     tmpfile=$(mktemp)
     if curl -fsSL "$GITHUB_RAW" -o "$tmpfile"; then
         mv "$tmpfile" "$SCRIPT_PATH"
         chmod +x "$SCRIPT_PATH"
-        echo -e "✅ 脚本已更新为最新版本，正在重启..."
+        echo "✅ 脚本已更新为最新版本，正在重启..."
         exec "$SCRIPT_PATH"
     else
-        echo -e "❌ 脚本更新失败，请检查网络或链接地址。"
+        echo "❌ 脚本更新失败，请检查网络或链接地址。"
         rm -f "$tmpfile"
     fi
 }
 
 install_mtproxy() {
+    echo ""
     read -e -p "请输入链接端口(默认443): " port
     [[ -z "$port" ]] && port="443"
 
+    echo ""
     read -e -p "请输入密码(默认随机生成): " secret
     [[ -z "$secret" ]] && secret=$(cat /proc/sys/kernel/random/uuid | sed 's/-//g')
-    echo -e "密码：$secret"
+    echo "密码：$secret"
 
+    echo ""
     echo "请选择伪装域名："
     echo "  1. azure.microsoft.com (默认)"
     echo "  2. www.microsoft.com"
@@ -45,19 +49,24 @@ install_mtproxy() {
         *) domain="azure.microsoft.com" ;;
     esac
 
+    echo ""
     read -rp "你需要TAG标签吗 (Y/N, 默认N): " tag_confirm
     [[ -z "$tag_confirm" ]] && tag_confirm="N"
 
-    echo -e "\n🧱 正在安装依赖 Docker..."
+    echo ""
+    echo "🧱 正在安装依赖 Docker..."
     echo y | bash <(curl -Ls https://cdn.jsdelivr.net/gh/xb0or/nginx-mtproxy@main/docker.sh)
 
     if [[ "$tag_confirm" =~ ^[yY]$ ]]; then
+        echo ""
         read -e -p "请输入TAG: " tag
         docker run --name nginx-mtproxy -d -e tag="$tag" -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:8443 ellermister/nginx-mtproxy:latest
     else
         docker run --name nginx-mtproxy -d -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:8443 ellermister/nginx-mtproxy:latest
     fi
 
+    echo ""
+    echo "正在设置容器开机自启..."
     docker update --restart=always nginx-mtproxy
 
     public_ip=$(curl -s http://ipv4.icanhazip.com)
@@ -65,7 +74,8 @@ install_mtproxy() {
     domain_hex=$(echo -n "$domain" | xxd -pu | tr -d '\n')
     client_secret="ee${secret}${domain_hex}"
 
-    echo -e "\n============== 安装完成 =============="
+    echo ""
+    echo "============== 安装完成 =============="
     echo -e "服务器IP：\033[32m$public_ip\033[0m"
     echo -e "服务器端口：\033[32m$port\033[0m"
     echo -e "MTProxy Secret：\033[33m$client_secret\033[0m"
@@ -77,11 +87,12 @@ install_mtproxy() {
 }
 
 uninstall_mtproxy() {
-    echo -e "\n⚠️ 即将删除 nginx-mtproxy 容器..."
+    echo ""
+    echo "⚠️ 即将删除 nginx-mtproxy 容器..."
     docker stop nginx-mtproxy && docker rm nginx-mtproxy
     read -rp "是否一并卸载 Docker？(y/N): " remove_docker
     [[ "$remove_docker" =~ ^[yY]$ ]] && apt-get remove --purge -y docker docker-engine docker.io containerd runc
-    echo -e "✅ 卸载完成。"
+    echo "✅ 卸载完成。"
 }
 
 show_menu() {
@@ -102,7 +113,8 @@ while true; do
         2) uninstall_mtproxy ;;
         3) exit 0 ;;
         4) update_script ;;
-        *) echo -e "无效输入，请重新选择。" ;;
+        *) echo "无效输入，请重新选择。" ;;
     esac
-    echo -e "\n按回车键返回菜单..." && read
+    echo ""
+    read -rp "按回车键返回菜单..."
 done
