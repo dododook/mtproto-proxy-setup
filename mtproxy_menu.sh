@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.0dp   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.1   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  支持多种MTProxy实现 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
@@ -36,11 +36,98 @@ generate_secret() {
   fi
 }
 
+# --- 安装经典版MTProxy ---
+install_classic() {
+  echo -e "\n${YELLOW}>>> 正在准备安装 MTProxy (nginx-mtproxy)...${RESET}"
+  
+  read -e -p "请输入连接端口 (默认: 443): " port
+  [[ -z "$port" ]] && port="443"
+
+  read -e -p "请输入密码 (默认: 自动生成): " secret
+  if [[ -z "$secret" ]]; then
+    secret=$(cat /proc/sys/kernel/random/uuid | sed 's/-//g')
+    echo -e "  ${GREEN}已自动生成密码：$secret${RESET}"
+  fi
+
+  echo ""
+  echo "请选择伪装域名："
+  echo "  1. azure.microsoft.com (默认)"
+  echo "  2. www.microsoft.com"
+  echo "  3. www.cloudflare.com"
+  echo "  4. cdn.jsdelivr.net"
+  echo "  5. www.google.com"
+  echo "  6. www.bing.com"
+  echo "  7. www.youtube.com"
+  echo "  8. 自定义域名"
+  read -p "请输入选项 [1-8]: " domain_choice
+  case $domain_choice in
+    2) domain="www.microsoft.com" ;;
+    3) domain="www.cloudflare.com" ;;
+    4) domain="cdn.jsdelivr.net" ;;
+    5) domain="www.google.com" ;;
+    6) domain="www.bing.com" ;;
+    7) domain="www.youtube.com" ;;
+    8)
+      read -rp "请输入自定义伪装域名: " domain
+      ;;
+    *) domain="azure.microsoft.com" ;;
+  esac
+  
+  echo -e "\n${BLUE}>>> 正在检查并安装 Docker...${RESET}"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo -e "${YELLOW}Docker 未安装，正在自动安装...${RESET}"
+    bash <(curl -fsSL https://get.docker.com) > /dev/null 2>&1
+    systemctl enable --now docker > /dev/null 2>&1
+  else
+    echo -e "${GREEN}您的系统已安装 Docker，跳过安装。${RESET}"
+  fi
+
+  echo -e "\n${BLUE}>>> 正在拉取并启动 nginx-mtproxy 容器...${RESET}"
+  while true; do
+    read -rp "是否需要设置 TAG 标签? (Y/N，默认: N): " tag_enable
+    [[ -z "$tag_enable" ]] && tag_enable="N"
+    if [[ $tag_enable =~ ^[yY]$ ]]; then
+      read -e -p "请输入 TAG 标签: " tag
+      if [[ -z "$tag" ]]; then
+        echo -e "${RED}错误：TAG 不能为空，请重新输入。${RESET}"
+      else
+        docker run --name nginx-mtproxy -d \
+          -e "tag=$tag" -e "secret=$secret" -e "domain=$domain" \
+          -p 80:80 -p "$port:$port" ellermister/nginx-mtproxy:latest > /dev/null 2>&1
+        break
+      fi
+    else
+      docker run --name nginx-mtproxy -d \
+        -e "secret=$secret" -e "domain=$domain" \
+        -p 80:80 -p "$port:$port" ellermister/nginx-mtproxy:latest > /dev/null 2>&1
+      break
+    fi
+  done
+
+  echo -e "\n${BLUE}>>> 正在设置容器开机自启...${RESET}"
+  docker update --restart=always nginx-mtproxy > /dev/null 2>&1
+
+  public_ip=$(curl -s ipv4.ip.sb || curl -s ipinfo.io/ip || hostname -I | awk '{print $1}')
+  domain_hex=$(echo -n "$domain" | xxd -ps | tr -d '\n')
+  client_secret="ee${secret}${domain_hex}"
+
+  echo -e "\n${GREEN}================== 安装成功！ ==================${RESET}"
+  echo -e "${BLUE}配置信息：${RESET}"
+  echo -e "  服务器 IP：${YELLOW}$public_ip${RESET}"
+  echo -e "  服务器端口：${YELLOW}$port${RESET}"
+  echo -e "  MTProxy Secret：${YELLOW}$client_secret${RESET}"
+  echo -e "  TG 认证地址：${YELLOW}http://$public_ip:80/add.php${RESET}"
+  echo -e "  TG 一键链接：${YELLOW}tg://proxy?server=$public_ip&port=$port&secret=$client_secret${RESET}"
+  echo -e "\n${YELLOW}提示：如果日志显示 8443，那是镜像内部端口，请以此处显示的端口为准。${RESET}"
+  echo -e "查看日志命令：${BLUE}docker logs nginx-mtproxy${RESET}"
+  echo -e "查看状态命令：${BLUE}docker ps | grep nginx-mtproxy${RESET}"
+  read -n 1 -s -r -p "按任意键返回主菜单..."
+}
+
 # --- 安装MTG高性能版本 ---
 install_mtg() {
   echo -e "\n${YELLOW}>>> 正在准备安装 MTG 高性能版本...${RESET}"
   
-  # 获取用户输入
   read -e -p "请输入连接端口 (默认: 443): " port
   [[ -z "$port" ]] && port="443"
   
@@ -62,6 +149,7 @@ install_mtg() {
     4) domain="www.google.com" ;;
     5)
       read -rp "请输入自定义伪装域名: " domain
+      [[ -z "$domain" ]] && domain="cloudfront.com"
       ;;
     *) domain="cloudfront.com" ;;
   esac
@@ -69,31 +157,61 @@ install_mtg() {
   echo -e "\n${BLUE}>>> 正在检查并安装 Docker...${RESET}"
   if ! command -v docker >/dev/null 2>&1; then
     echo -e "${YELLOW}Docker 未安装，正在自动安装...${RESET}"
-    bash <(curl -fsSL https://get.docker.com)
+    bash <(curl -fsSL https://get.docker.com) > /dev/null 2>&1
+    systemctl enable --now docker > /dev/null 2>&1
   else
     echo -e "${GREEN}您的系统已安装 Docker，跳过安装。${RESET}"
   fi
   
-  echo -e "\n${BLUE}>>> 正在拉取并启动 MTG 容器...${RESET}"
-  docker pull nineseconds/mtg
-  docker run -d --name mtg --restart always \
+  echo -e "\n${BLUE}>>> 正在拉取 MTG 镜像...${RESET}"
+  if ! docker pull nineseconds/mtg > /dev/null 2>&1; then
+    echo -e "${RED}⚠️ Docker镜像拉取失败，尝试使用备用镜像源...${RESET}"
+    if ! docker pull registry.cn-hangzhou.aliyuncs.com/mtg_proxy/mtg:latest > /dev/null 2>&1; then
+      echo -e "${RED}❌ 无法拉取MTG镜像，请检查网络连接或稍后再试${RESET}"
+      read -n 1 -s -r -p "按任意键返回主菜单..."
+      return 1
+    else
+      echo -e "${GREEN}✅ 备用镜像拉取成功${RESET}"
+      local image_name="registry.cn-hangzhou.aliyuncs.com/mtg_proxy/mtg:latest"
+    fi
+  else
+    echo -e "${GREEN}✅ 官方镜像拉取成功${RESET}"
+    local image_name="nineseconds/mtg:latest"
+  fi
+  
+  echo -e "\n${BLUE}>>> 正在启动 MTG 容器...${RESET}"
+  if docker ps -a --format '{{.Names}}' | grep -q '^mtg$'; then
+    echo -e "${YELLOW}检测到已存在的mtg容器，正在删除...${RESET}"
+    docker stop mtg > /dev/null 2>&1
+    docker rm mtg > /dev/null 2>&1
+  fi
+  
+  if ! docker run -d --name mtg --restart always \
     -p "$port:443" \
     -e MTG_SECRET="$secret" \
     -e MTG_FAKE_TLS_DOMAIN="$domain" \
-    nineseconds/mtg
+    "$image_name" > /dev/null 2>&1; then
+    echo -e "${RED}❌ 容器启动失败，请检查端口是否被占用${RESET}"
+    read -n 1 -s -r -p "按任意键返回主菜单..."
+    return 1
+  fi
   
-  public_ip=$(curl -s ipv4.ip.sb || curl -s ipinfo.io/ip)
+  sleep 2  # 等待容器完全启动
+  public_ip=$(curl -s ipv4.ip.sb || curl -s ipinfo.io/ip || hostname -I | awk '{print $1}')
   
   echo -e "\n${GREEN}================== 安装成功！ ==================${RESET}"
   echo -e "${BLUE}配置信息：${RESET}"
   echo -e "  服务器 IP：${YELLOW}$public_ip${RESET}"
   echo -e "  服务器端口：${YELLOW}$port${RESET}"
   echo -e "  MTG Secret：${YELLOW}$secret${RESET}"
+  echo -e "  伪装域名：${YELLOW}$domain${RESET}"
   echo -e "  TG 一键链接：${YELLOW}tg://proxy?server=$public_ip&port=$port&secret=$secret${RESET}"
   echo -e "  或：${YELLOW}https://t.me/proxy?server=$public_ip&port=$port&secret=$secret${RESET}"
   echo -e "\n${YELLOW}提示：MTG 版本性能更高但功能较简单，不支持Web界面。${RESET}"
   echo -e "查看日志命令：${BLUE}docker logs mtg${RESET}"
   echo -e "查看状态命令：${BLUE}docker ps | grep mtg${RESET}"
+  echo -e "停止服务命令：${BLUE}docker stop mtg${RESET}"
+  echo -e "启动服务命令：${BLUE}docker start mtg${RESET}"
   read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 
@@ -171,6 +289,7 @@ uninstall_mtproxy() {
 
     echo -e "${GREEN}✅ Docker 及其依赖已成功卸载。${RESET}"
   fi
+  read -n 1 -s -r -p "按任意键返回主菜单..."
 }
 
 # --- 容器管理函数 ---
@@ -215,16 +334,13 @@ while true; do
 
   case $menu in
     1)
-      # 原有nginx-mtproxy安装代码保持不变
-      # ...
+      install_classic
       ;;
     2)
       install_mtg
       ;;
     3)
       uninstall_mtproxy
-      read -n 1 -s -r -p "按任意键返回主菜单..."
-      echo ""
       ;;
     4)
       echo -e "请选择要重启的容器:"
@@ -263,8 +379,14 @@ while true; do
       echo -e "🔄 正在更新脚本..."
       SCRIPT_PATH=$(readlink -f "$0")
       curl -fsSL https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu.sh -o "$SCRIPT_PATH"
-      echo -e "${GREEN}✅ 脚本已更新，正在重新加载...${RESET}"
-      exec "$SCRIPT_PATH"
+      if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ 脚本已更新，正在重新加载...${RESET}"
+        chmod +x "$SCRIPT_PATH"
+        exec "$SCRIPT_PATH"
+      else
+        echo -e "${RED}❌ 脚本更新失败，请检查网络连接${RESET}"
+      fi
+      read -n 1 -s -r -p "按任意键返回主菜单..."
       ;;
     8)
       echo -e "${YELLOW}再见，有缘再会。${RESET}"
