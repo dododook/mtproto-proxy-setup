@@ -6,7 +6,7 @@ RESET='\033[0m'
 
 clear
 echo -e "${GREEN}=========================================="
-echo -e "===        MTProxy NGINX 管理工具 v5.3.4      ==="
+echo -e "===        MTProxy NGINX 管理工具 v5.3.5      ==="
 echo -e "==========================================${RESET}"
 echo -e "${YELLOW}作者：@yaoguangting ｜ 基于 ellermister/nginx-mtproxy 🍥${RESET}\n"
 
