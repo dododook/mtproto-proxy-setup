@@ -1,88 +1,146 @@
 #!/bin/bash
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
-BOT_TOKEN="8027310373:AAEuKPwgkvr3P-8b54GbKPaM5uU7hGWv71Q"
-CHAT_ID="6252019930"
-DEFAULT_DOMAINS=("cloudflare.com" "www.bing.com" "cdn.jsdelivr.net" "www.microsoft.com" "azure.microsoft.com")
+# 颜色定义
+GREEN="\033[32m"
+RED="\033[31m"
+YELLOW="\033[33m"
+RESET="\033[0m"
 
-function deploy_mtproxy() {
-  read -p "请输入映射端口（默认443）: " MAPPED_PORT
-  MAPPED_PORT=${MAPPED_PORT:-443}
+echo -e "${GREEN}========== MTProxy NGINX 管理工具 ==========${RESET}"
+echo -e "${YELLOW}作者：@yaoguangting ｜ 基于 ellermister/nginx-mtproxy${RESET}\n"
 
-  read -p "请输入 HTTP 映射端口（默认80）: " MAPPED_HTTP
-  MAPPED_HTTP=${MAPPED_HTTP:-80}
+echo -e "请选择操作："
+echo -e "1. 安装 MTProxy"
+echo -e "2. 卸载 MTProxy"
+echo -e "3. 退出"
+read -rp "请输入选项 [1-3]: " menu
 
-  echo -e "可选伪装域名："
-  for i in "${!DEFAULT_DOMAINS[@]}"; do
-    echo "$((i+1)). ${DEFAULT_DOMAINS[$i]}"
-  done
-  read -p "请输入伪装域名编号或自定义域名（默认1）: " DOMAIN_CHOICE
-  if [[ "$DOMAIN_CHOICE" =~ ^[1-9][0-9]*$ ]] && [ "$DOMAIN_CHOICE" -le ${#DEFAULT_DOMAINS[@]} ]; then
-    DOMAIN="${DEFAULT_DOMAINS[$((DOMAIN_CHOICE-1))]}"
-  elif [ -z "$DOMAIN_CHOICE" ]; then
-    DOMAIN="${DEFAULT_DOMAINS[0]}"
+case $menu in
+1)
+  echo -e "\n${GREEN}========== 开始安装 MTProxy ==========${RESET}"
+
+  read -e -p "请输入链接端口 [默认443]: " port
+  [[ -z "${port}" ]] && port="443"
+
+  read -e -p "请输入密码 [默认随机生成]: " secret
+  if [[ -z "${secret}" ]]; then
+    secret=$(cat /proc/sys/kernel/random/uuid | sed 's/-//g')
+    echo -e "已生成随机密码：${YELLOW}$secret${RESET}"
+  fi
+
+  echo -e "\n请选择伪装域名："
+  echo -e "1) www.microsoft.com"
+  echo -e "2) www.bing.com"
+  echo -e "3) www.cloudflare.com"
+  echo -e "4) cdn.jsdelivr.net"
+  echo -e "5) www.google.com"
+  echo -e "6) 自定义输入"
+  read -rp "请输入序号 [默认1]: " domain_choice
+
+  case "$domain_choice" in
+    2) domain="www.bing.com" ;;
+    3) domain="www.cloudflare.com" ;;
+    4) domain="cdn.jsdelivr.net" ;;
+    5) domain="www.google.com" ;;
+    6)
+      read -rp "请输入自定义域名: " domain
+      [[ -z "$domain" ]] && domain="www.microsoft.com"
+      ;;
+    *) domain="www.microsoft.com" ;;
+  esac
+
+  read -rp "你需要TAG标签吗 (Y/N): " enable_tag
+  [[ -z ${enable_tag} ]] && enable_tag="Y"
+
+  if docker ps -a | grep -q nginx-mtproxy; then
+      echo -e "${YELLOW}检测到已存在 nginx-mtproxy 容器，正在删除...${RESET}"
+      docker rm -f nginx-mtproxy >/dev/null 2>&1
+  fi
+
+  echo -e "${GREEN}正在安装依赖: Docker...${RESET}"
+  echo y | bash <(curl -L -s https://raw.githubusercontent.com/xb0or/nginx-mtproxy/main/docker.sh)
+
+  echo -e "${GREEN}正在安装 nginx-mtproxy 容器...${RESET}"
+
+  if [[ "${enable_tag}" =~ ^[Yy] ]]; then
+    while true; do
+      read -e -p "请输入TAG: " tag
+      if [[ -n "${tag}" ]]; then
+        break
+      else
+        echo -e "${RED}TAG 不能为空，请重新输入。${RESET}"
+      fi
+    done
+    docker run --name nginx-mtproxy -d -e tag="$tag" -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
   else
-    DOMAIN="$DOMAIN_CHOICE"
+    docker run --name nginx-mtproxy -d -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
   fi
 
-  read -p "请输入自定义 secret（32位十六进制，留空随机生成）: " SECRET
-  if [ -z "$SECRET" ]; then
-    SECRET=$(openssl rand -hex 16)
-    echo -e "[✔] 已随机生成 secret: $SECRET"
+  echo -e "${GREEN}正在设置容器开机自启...${RESET}"
+  docker update --restart=always nginx-mtproxy
+
+  public_ip=$(curl -s http://ipv4.icanhazip.com)
+  [ -z "$public_ip" ] && public_ip=$(curl -s ipinfo.io/ip --ipv4)
+
+  # 检查 xxd 是否安装
+  if ! command -v xxd &> /dev/null; then
+    echo -e "${YELLOW}未检测到 xxd，正在尝试安装...${RESET}"
+    apt-get update -y && apt-get install -y xxd
   fi
 
-  docker rm -f mtproxy 2>/dev/null
+  if command -v xxd &> /dev/null; then
+    domain_hex=$(xxd -pu <<< "$domain" | sed 's/0a//g')
+    client_secret="ee${secret}${domain_hex}"
+  else
+    echo -e "${RED}警告：未成功安装 xxd，生成的 Secret 将不包含伪装域名！${RESET}"
+    client_secret="ee${secret}"
+  fi
 
-  docker run -d --name mtproxy --restart=always     -e domain="$DOMAIN"     -e secret="$SECRET"     -e ip_white_list="IP"     -e provider=2     -e mapped_tls_port="$MAPPED_PORT"     -p ${MAPPED_HTTP}:80     -p ${MAPPED_PORT}:443     ellermister/mtproxy
+  echo -e "${GREEN}============== 安装完成 ==============${RESET}"
+  echo -e "服务器IP：${RED}$public_ip${RESET}"
+  echo -e "服务器端口：${RED}$port${RESET}"
+  echo -e "MTProxy Secret：${RED}$client_secret${RESET}"
+  echo -e "TG认证地址：${YELLOW}http://${public_ip}:80/add.php${RESET}"
+  echo -e "TG一键链接：${YELLOW}https://t.me/proxy?server=${public_ip}&port=${port}&secret=${client_secret}${RESET}"
+  echo -e "${YELLOW}注意：如果你使用的是默认端口 443，日志中可能显示 8443，为镜像内部映射，请以此处提示为准。${RESET}"
+  echo -e "${YELLOW}如需查看日志，请执行：docker logs nginx-mtproxy${RESET}"
+  ;;
 
-  IP=$(curl -s ipv4.ip.sb)
-  HEX_DOMAIN=$(echo -n $DOMAIN | xxd -ps -c 200)
-  SECRET_FULL="ee${SECRET}${HEX_DOMAIN}"
-  LINK="tg://proxy?server=${IP}&port=${MAPPED_PORT}&secret=${SECRET_FULL}"
-  QR_LINK="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${LINK}"
-  WHITE_LIST_URL="http://${IP}:${MAPPED_HTTP}/add.php"
+2)
+  echo -e "\n${GREEN}========== 开始卸载 MTProxy ==========${RESET}"
 
-  echo -e "\n✅ MTProxy 已部署"
-  echo -e "🔐 Secret: ${SECRET_FULL}"
-  echo -e "📡 链接: ${LINK}"
-  echo -e "🧊 白名单激活: ${WHITE_LIST_URL}"
-  echo -e "📷 二维码链接: ${QR_LINK}\n"
+  if docker ps -a | grep -q nginx-mtproxy; then
+      echo -e "${YELLOW}正在停止并移除容器 nginx-mtproxy...${RESET}"
+      docker stop nginx-mtproxy >/dev/null 2>&1
+      docker rm nginx-mtproxy >/dev/null 2>&1
+  else
+      echo -e "${RED}未检测到容器 nginx-mtproxy，无需卸载。${RESET}"
+  fi
 
-  curl -s -X POST https://api.telegram.org/bot${BOT_TOKEN}/sendMessage     -d chat_id="${CHAT_ID}"     -d text="✅ MTProxy 部署完成\n🌍 白名单激活地址: ${WHITE_LIST_URL}\n📡 连接: ${LINK}"
-}
+  read -rp "是否同时删除镜像 ellermister/nginx-mtproxy？(Y/N): " rm_image
+  [[ -z "$rm_image" ]] && rm_image="N"
+  if [[ "$rm_image" =~ ^[Yy]$ ]]; then
+      echo -e "${YELLOW}正在删除镜像...${RESET}"
+      docker rmi ellermister/nginx-mtproxy:latest >/dev/null 2>&1
+  fi
 
-function uninstall_mtproxy() {
-  echo -e "\033[1;33m正在停止并删除 MTProxy 容器...\033[0m"
-  docker stop mtproxy >/dev/null 2>&1
-  docker rm -f mtproxy >/dev/null 2>&1
-  echo -e "\033[1;32m✅ 已卸载 MTProxy。\033[0m"
-}
+  read -rp "是否卸载 Docker 本体（请谨慎）？(Y/N): " rm_docker
+  [[ -z "$rm_docker" ]] && rm_docker="N"
+  if [[ "$rm_docker" =~ ^[Yy]$ ]]; then
+      echo -e "${YELLOW}正在卸载 Docker...${RESET}"
+      bash <(curl -sSL https://get.docker.com/) --uninstall
+  fi
 
-function view_connections() {
-  echo -e "\n🔍 正在统计连接客户端 IP..."
-  ss -tn sport = :443 | awk 'NR>1 {print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | while read count ip; do
-    echo "✅ ${ip} 有 ${count} 个连接（可能是 Telegram 客户端）"
-  done
-}
+  echo -e "${GREEN}✅ nginx-mtproxy 卸载完成！${RESET}"
+  ;;
 
-function total_connections() {
-  count=$(ss -tn sport = :443 | awk 'NR>1' | wc -l)
-  echo -e "\n📊 当前总连接数: ${count}"
-}
+3)
+  echo -e "${YELLOW}已退出。感谢使用！${RESET}"
+  exit 0
+  ;;
 
-while true; do
-echo -e "\n==== MTProxy 管理脚本（固定端口监听 v5） ===="
-echo "1. 部署 MTProxy"
-echo "2. 卸载 MTProxy"
-echo "3. 退出"
-echo "4. 查看连接总数"
-echo "5. 查看 Telegram 客户端连接"
-read -p "请输入操作选项 [1-5]: " choice
-case $choice in
-  1) deploy_mtproxy ;;
-  2) uninstall_mtproxy ;;
-  3) echo "已退出"; exit 0 ;;
-  4) total_connections ;;
-  5) view_connections ;;
-  *) echo "无效输入";;
+*)
+  echo -e "${RED}无效选项，请输入 1 ~ 3。${RESET}"
+  ;;
 esac
-done
