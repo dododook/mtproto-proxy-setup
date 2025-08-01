@@ -198,7 +198,7 @@ while true; do
       ;;
 
     7)
-      echo -e "${YELLOW}再见！${RESET}"
+      echo -e "${YELLOW}再见，有缘再会。${RESET}"
       exit 0
       ;;
 
