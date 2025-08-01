@@ -1,4 +1,5 @@
 #!/bin/bash
+# Author: @yaoguangting
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
 GITHUB_RAW="https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu.sh"
@@ -97,12 +98,18 @@ uninstall_mtproxy() {
 
 show_menu() {
     clear
-    echo "======== MTProxy 管理菜单 ========"
-    echo "1. 安装 MTProxy"
-    echo "2. 卸载 MTProxy"
-    echo "3. 退出"
-    echo "4. 更新本脚本"
-    echo "=================================="
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    RESET='\033[0m'
+
+    echo -e "${GREEN}========== MTProxy NGINX 管理工具 ==========${RESET}"
+    echo -e "${YELLOW}作者：@yaoguangting ｜ 基于 ellermister/nginx-mtproxy 🍥${RESET}\n"
+
+    echo -e "请选择操作："
+    echo -e "1. 安装 MTProxy"
+    echo -e "2. 卸载 MTProxy"
+    echo -e "3. 退出"
+    echo -e "4. 更新脚本"
 }
 
 while true; do
