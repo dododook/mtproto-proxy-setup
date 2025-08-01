@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.1   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.2   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  支持多种MTProxy实现 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
@@ -186,17 +186,16 @@ install_mtg() {
     docker rm mtg > /dev/null 2>&1
   fi
   
+  # 修正后的启动命令
   if ! docker run -d --name mtg --restart always \
     -p "$port:443" \
-    -e MTG_SECRET="$secret" \
-    -e MTG_FAKE_TLS_DOMAIN="$domain" \
-    "$image_name" > /dev/null 2>&1; then
+    "$image_name" run "$secret" --bind="0.0.0.0:443" --tls-domain="$domain" > /dev/null 2>&1; then
     echo -e "${RED}❌ 容器启动失败，请检查端口是否被占用${RESET}"
     read -n 1 -s -r -p "按任意键返回主菜单..."
     return 1
   fi
   
-  sleep 2  # 等待容器完全启动
+  sleep 3  # 增加等待时间确保容器完全启动
   public_ip=$(curl -s ipv4.ip.sb || curl -s ipinfo.io/ip || hostname -I | awk '{print $1}')
   
   echo -e "\n${GREEN}================== 安装成功！ ==================${RESET}"
