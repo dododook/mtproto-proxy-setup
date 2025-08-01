@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.8   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.9   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  基于 ellermister/nginx-mtproxy 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
@@ -27,7 +27,6 @@ show_menu() {
 
 # --- 卸载函数 ---
 uninstall_mtproxy() {
-    # 停止并删除 MTProxy 容器
     echo -e "\n${YELLOW}>>> 正在停止并删除 nginx-mtproxy 容器...${RESET}"
     if docker ps -a --format '{{.Names}}' | grep -q '^nginx-mtproxy$'; then
         read -rp "确定要删除 nginx-mtproxy 容器吗？(Y/N): " confirm_remove
@@ -42,21 +41,16 @@ uninstall_mtproxy() {
         echo -e "${YELLOW}ℹ️ 未检测到 nginx-mtproxy 容器，无需删除。${RESET}"
     fi
 
-    # 询问是否卸载 Docker
     echo -e "\n${YELLOW}>>> MTProxy 相关操作已完成。${RESET}"
     read -rp "是否需要一并卸载 Docker 及其相关依赖？此操作会影响服务器上所有其他 Docker 容器！(Y/N): " remove_docker
     if [[ "$remove_docker" =~ ^[yY]$ ]]; then
         echo -e "\n${BLUE}>>> 正在尝试卸载 Docker...${RESET}"
-
         if command -v apt-get > /dev/null; then
-            # Debian/Ubuntu 系统
             apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1
             apt-get autoremove -y > /dev/null 2>&1
         elif command -v yum > /dev/null; then
-            # CentOS/RHEL 系统
             yum remove -y docker-ce docker-ce-cli containerd.io > /dev/null 2>&1
         elif command -v dnf > /dev/null; then
-            # Fedora 系统
             dnf remove -y docker-ce docker-ce-cli containerd.io > /dev/null 2>&1
         else
             echo -e "${RED}⚠️ 未知的操作系统类型，无法自动卸载 Docker。请手动执行卸载。${RESET}"
@@ -83,7 +77,6 @@ while true; do
 
   case $menu in
     1)
-      # 安装 MTProxy
       echo -e "${YELLOW}>>> 正在准备安装 MTProxy...${RESET}"
       read -e -p "请输入连接端口 (默认: 443): " port
       [[ -z "$port" ]] && port="443"
@@ -94,7 +87,6 @@ while true; do
         echo -e "  ${GREEN}已自动生成密码：$secret${RESET}"
       fi
 
-      # 伪装域名选择菜单
       echo ""
       echo "请选择伪装域名："
       echo "  1. azure.microsoft.com (默认)"
@@ -104,7 +96,8 @@ while true; do
       echo "  5. www.google.com"
       echo "  6. www.bing.com"
       echo "  7. www.youtube.com"
-      read -p "请输入选项 [1-7]: " domain_choice
+      echo "  8. 自定义域名"
+      read -p "请输入选项 [1-8]: " domain_choice
       case $domain_choice in
         2) domain="www.microsoft.com" ;;
         3) domain="www.cloudflare.com" ;;
@@ -112,6 +105,9 @@ while true; do
         5) domain="www.google.com" ;;
         6) domain="www.bing.com" ;;
         7) domain="www.youtube.com" ;;
+        8)
+          read -rp "请输入自定义伪装域名: " domain
+          ;;
         *) domain="azure.microsoft.com" ;;
       esac
       
@@ -124,24 +120,26 @@ while true; do
       fi
 
       echo -e "\n${BLUE}>>> 正在拉取并启动 nginx-mtproxy 容器...${RESET}"
-      read -rp "是否需要设置 TAG 标签? (Y/N，默认: N): " tag_enable
-      [[ -z "$tag_enable" ]] && tag_enable="N"
-      if [[ $tag_enable =~ ^[yY]$ ]]; then
-        read -e -p "请输入 TAG 标签: " tag
-        if [[ -z "$tag" ]]; then
-          echo -e "${RED}错误：TAG 不能为空！${RESET}"
-          read -n 1 -s -r -p "按任意键返回主菜单..."
-          echo ""
-          continue
+      while true; do
+        read -rp "是否需要设置 TAG 标签? (Y/N，默认: N): " tag_enable
+        [[ -z "$tag_enable" ]] && tag_enable="N"
+        if [[ $tag_enable =~ ^[yY]$ ]]; then
+          read -e -p "请输入 TAG 标签: " tag
+          if [[ -z "$tag" ]]; then
+            echo -e "${RED}错误：TAG 不能为空，请重新输入。${RESET}"
+          else
+            docker run --name nginx-mtproxy -d \
+              -e "tag=$tag" -e "secret=$secret" -e "domain=$domain" \
+              -p 80:80 -p "$port:$port" ellermister/nginx-mtproxy:latest
+            break
+          fi
+        else
+          docker run --name nginx-mtproxy -d \
+            -e "secret=$secret" -e "domain=$domain" \
+            -p 80:80 -p "$port:$port" ellermister/nginx-mtproxy:latest
+          break
         fi
-        docker run --name nginx-mtproxy -d \
-          -e tag="$tag" -e secret="$secret" -e domain="$domain" \
-          -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
-      else
-        docker run --name nginx-mtproxy -d \
-          -e secret="$secret" -e domain="$domain" \
-          -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
-      fi
+      done
 
       echo -e "\n${BLUE}>>> 正在设置容器开机自启...${RESET}"
       docker update --restart=always nginx-mtproxy
@@ -159,6 +157,7 @@ while true; do
       echo -e "  TG 一键链接：${YELLOW}tg://proxy?server=$public_ip&port=$port&secret=$client_secret${RESET}"
       echo -e "\n${YELLOW}提示：如果日志显示 8443，那是镜像内部端口，请以此处显示的端口为准。${RESET}"
       echo -e "查看日志命令：${BLUE}docker logs nginx-mtproxy${RESET}"
+      echo -e "查看状态命令：${BLUE}docker ps | grep nginx-mtproxy${RESET}"
       read -n 1 -s -r -p "按任意键返回主菜单..."
       echo ""
       ;;
@@ -192,9 +191,10 @@ while true; do
 
     6)
       echo -e "🔄 正在更新脚本..."
-      curl -fsSL https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu.sh -o "$0"
+      SCRIPT_PATH=$(readlink -f "$0")
+      curl -fsSL https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu.sh -o "$SCRIPT_PATH"
       echo -e "${GREEN}✅ 脚本已更新，正在重新加载...${RESET}"
-      exec "$0"
+      exec "$SCRIPT_PATH"
       ;;
 
     7)
