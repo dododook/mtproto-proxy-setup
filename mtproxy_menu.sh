@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.7   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy NGINX 管理工具 v5.3.8   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  基于 ellermister/nginx-mtproxy 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
