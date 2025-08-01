@@ -8,11 +8,10 @@
 
 ## 🚀 快速开始
 
-```bash
-# 下载并运行脚本
-curl -o mtproxy_menu.sh https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu_v2.sh
+curl -o mtproxy_menu.sh https://raw.githubusercontent.com/dododook/mtproto-proxy-setup/main/mtproxy_menu.sh
 chmod +x mtproxy_menu.sh
 ./mtproxy_menu.sh
+
 ```
 
 ---
