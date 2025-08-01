@@ -30,28 +30,30 @@ case $menu in
   fi
 
   echo -e "\n请选择伪装域名："
-  echo -e "1) www.microsoft.com"
-  echo -e "2) www.bing.com"
-  echo -e "3) www.cloudflare.com"
-  echo -e "4) cdn.jsdelivr.net"
-  echo -e "5) www.google.com"
-  echo -e "6) 自定义输入"
+  echo -e "1) azure.microsoft.com"
+  echo -e "2) www.microsoft.com"
+  echo -e "3) www.bing.com"
+  echo -e "4) www.cloudflare.com"
+  echo -e "5) cdn.jsdelivr.net"
+  echo -e "6) www.google.com"
+  echo -e "7) 自定义输入"
   read -rp "请输入序号 [默认1]: " domain_choice
 
   case "$domain_choice" in
-    2) domain="www.bing.com" ;;
-    3) domain="www.cloudflare.com" ;;
-    4) domain="cdn.jsdelivr.net" ;;
-    5) domain="www.google.com" ;;
-    6)
+    2) domain="www.microsoft.com" ;;
+    3) domain="www.bing.com" ;;
+    4) domain="www.cloudflare.com" ;;
+    5) domain="cdn.jsdelivr.net" ;;
+    6) domain="www.google.com" ;;
+    7)
       read -rp "请输入自定义域名: " domain
-      [[ -z "$domain" ]] && domain="www.microsoft.com"
+      [[ -z "$domain" ]] && domain="azure.microsoft.com"
       ;;
-    *) domain="www.microsoft.com" ;;
+    *) domain="azure.microsoft.com" ;;
   esac
 
   read -rp "你需要TAG标签吗 (Y/N): " enable_tag
-  [[ -z ${enable_tag} ]] && enable_tag="Y"
+  [[ -z ${enable_tag} ]] && enable_tag="N"
 
   if docker ps -a | grep -q nginx-mtproxy; then
       echo -e "${YELLOW}检测到已存在 nginx-mtproxy 容器，正在删除...${RESET}"
@@ -72,9 +74,9 @@ case $menu in
         echo -e "${RED}TAG 不能为空，请重新输入。${RESET}"
       fi
     done
-    docker run --name nginx-mtproxy -d -e tag="$tag" -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
+    docker run --name nginx-mtproxy -d -e tag="$tag" -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:8443 ellermister/nginx-mtproxy:latest
   else
-    docker run --name nginx-mtproxy -d -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:$port ellermister/nginx-mtproxy:latest
+    docker run --name nginx-mtproxy -d -e secret="$secret" -e domain="$domain" -p 80:80 -p $port:8443 ellermister/nginx-mtproxy:latest
   fi
 
   echo -e "${GREEN}正在设置容器开机自启...${RESET}"
@@ -83,7 +85,6 @@ case $menu in
   public_ip=$(curl -s http://ipv4.icanhazip.com)
   [ -z "$public_ip" ] && public_ip=$(curl -s ipinfo.io/ip --ipv4)
 
-  # 检查 xxd 是否安装
   if ! command -v xxd &> /dev/null; then
     echo -e "${YELLOW}未检测到 xxd，正在尝试安装...${RESET}"
     apt-get update -y && apt-get install -y xxd
