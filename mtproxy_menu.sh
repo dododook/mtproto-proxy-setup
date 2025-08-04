@@ -11,7 +11,7 @@ RESET='\033[0m'
 show_menu() {
   clear
   echo -e "${GREEN}==========================================${RESET}"
-  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.2   ===${RESET}"
+  echo -e "${GREEN}===    MTProxy 管理工具 v5.4.1   ===${RESET}"
   echo -e "${GREEN}==========================================${RESET}"
   echo -e "${YELLOW}作者：@yaoguangting  |  支持多种MTProxy实现 🍥${RESET}\n"
   echo -e "请选择您想要执行的操作："
